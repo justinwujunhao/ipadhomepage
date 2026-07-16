@@ -42,7 +42,7 @@ export const defaultState = {
     latitude: 23.0215,
     longitude: 113.1214,
     backgroundImage: '',
-    backgroundImages: ['/assets/sample-1.svg', '/assets/sample-2.svg', '/assets/sample-3.svg']
+    backgroundImages: []
   },
   messages: [
     {
@@ -137,11 +137,14 @@ async function readRawBody(req, maxBytes = 15 * 1024 * 1024) {
   return Buffer.concat(chunks);
 }
 
+// 列表/删除用：包含 svg（已存在的示例 SVG 可列出与删除）
 const ASSET_EXT_RE = /\.(jpe?g|png|gif|webp|svg)$/i;
-function sanitizeAssetName(raw) {
+// 上传用：禁用 svg，防止含 <script> 的 SVG 在同源执行 XSS
+const UPLOAD_EXT_RE = /\.(jpe?g|png|gif|webp)$/i;
+function sanitizeAssetName(raw, extRe = ASSET_EXT_RE) {
   if (!raw || typeof raw !== 'string') return null;
   if (raw.includes('/') || raw.includes('\\') || raw === '.' || raw === '..') return null;
-  if (!ASSET_EXT_RE.test(raw)) return null;
+  if (!extRe.test(raw)) return null;
   return raw;
 }
 
@@ -158,6 +161,10 @@ function normalizeState(input) {
   state.settings.backgroundImages = Array.isArray(state.settings.backgroundImages)
     ? state.settings.backgroundImages.filter((value) => typeof value === 'string')
     : [];
+  // 迁移：旧的单张 backgroundImage 在未显式配置 backgroundImages 时转为数组，避免被默认值覆盖
+  if (state.settings.backgroundImages.length === 0 && state.settings.backgroundImage) {
+    state.settings.backgroundImages = [state.settings.backgroundImage];
+  }
 
   state.messages = Array.isArray(source.messages) ? source.messages.filter(Boolean) : state.messages;
   state.todos = Array.isArray(source.todos) ? source.todos.filter(Boolean) : state.todos;
@@ -401,7 +408,8 @@ export async function createApp(options = {}) {
         ...state.settings,
         title: cleanText(body.title, 80) || state.settings.title,
         cityName: cleanText(body.cityName, 80) || state.settings.cityName,
-        backgroundImage: cleanText(body.backgroundImage, 300),
+        backgroundImage:
+          body.backgroundImage !== undefined ? cleanText(body.backgroundImage, 300) : state.settings.backgroundImage,
         backgroundImages: Array.isArray(body.backgroundImages)
           ? body.backgroundImages.map((value) => cleanText(value, 300)).filter(Boolean)
           : state.settings.backgroundImages,
@@ -428,9 +436,9 @@ export async function createApp(options = {}) {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/assets') {
-      const name = sanitizeAssetName(url.searchParams.get('name'));
+      const name = sanitizeAssetName(url.searchParams.get('name'), UPLOAD_EXT_RE);
       if (!name) {
-        jsonResponse(res, 400, { error: 'Invalid image filename (allowed: jpg/png/gif/webp/svg)' });
+        jsonResponse(res, 400, { error: 'Invalid image filename (allowed: jpg/png/gif/webp; svg disabled for security)' });
         return;
       }
       const body = await readRawBody(req);

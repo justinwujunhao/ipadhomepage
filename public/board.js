@@ -225,6 +225,11 @@ function applyBackground(state) {
   const list = Array.isArray(settings.backgroundImages) ? settings.backgroundImages.filter(Boolean) : [];
   const imgs = list.length ? list : (settings.backgroundImage ? [settings.backgroundImage] : []);
 
+  // 列表未变化时保留当前轮播进度和 timer，避免被 5 秒一次的 loadState 反复重置
+  if (imgs.length === bgSlides.length && imgs.every((value, i) => value === bgSlides[i])) {
+    return;
+  }
+
   if (bgTimer) {
     clearInterval(bgTimer);
     bgTimer = null;

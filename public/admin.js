@@ -272,10 +272,28 @@ $('asset-grid').addEventListener('click', async (event) => {
         .map((line) => line.trim())
         .filter((line) => line !== assetPath)
         .join('\n');
-      setStatus(`已删除 ${name}`);
+      // 删除文件后立即同步保存轮播设置，避免服务端 state 仍引用已删除图片
+      await saveBackgroundImages();
+      setStatus(`已删除 ${name} 并更新轮播`);
       await loadAssets();
     } catch (error) {
       setStatus(`删除失败：${error.message}`);
     }
   }
 });
+
+async function saveBackgroundImages() {
+  const textarea = $('settings-form').backgroundImages;
+  const list = textarea.value.split('\n').map((line) => line.trim()).filter(Boolean);
+  const response = await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ backgroundImages: list })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || `HTTP ${response.status}`);
+  }
+  currentState = await response.json();
+  render();
+}
