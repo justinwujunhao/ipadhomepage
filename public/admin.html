@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>家庭看板管理</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script defer src="/admin.js"></script>
+  </head>
+  <body class="admin-page">
+    <main class="admin-shell">
+      <header class="admin-header">
+        <div>
+          <p class="eyebrow">家庭看板</p>
+          <h1>管理页</h1>
+        </div>
+        <a class="ghost-link" href="/">打开展示页</a>
+      </header>
+
+      <section class="admin-grid">
+        <form class="admin-card" id="settings-form">
+          <h2>显示设置</h2>
+          <label>
+            看板标题
+            <input name="title" maxlength="80" placeholder="家里的小看板">
+          </label>
+          <label>
+            天气城市
+            <input name="cityName" maxlength="80" placeholder="广东省佛山市">
+          </label>
+          <div class="field-row">
+            <label>
+              纬度
+              <input name="latitude" inputmode="decimal" placeholder="23.0215">
+            </label>
+            <label>
+              经度
+              <input name="longitude" inputmode="decimal" placeholder="113.1214">
+            </label>
+          </div>
+          <label>
+            背景图片路径
+            <input name="backgroundImage" maxlength="300" placeholder="/assets/background.jpg">
+          </label>
+          <p class="help-text">把照片放到 public/assets 里后，可填类似 /assets/background.jpg。</p>
+          <button type="submit">保存设置</button>
+        </form>
+
+        <section class="admin-card">
+          <h2>留言板</h2>
+          <form class="inline-form" id="message-form">
+            <input name="text" maxlength="500" placeholder="今晚有汤、快递在门口……">
+            <button type="submit">添加留言</button>
+          </form>
+          <div class="editor-list" id="message-editor"></div>
+        </section>
+
+        <section class="admin-card">
+          <h2>备忘</h2>
+          <form class="inline-form" id="todo-form">
+            <input name="text" maxlength="300" placeholder="买牛奶、倒垃圾、浇花……">
+            <button type="submit">添加备忘</button>
+          </form>
+          <div class="editor-list" id="todo-editor"></div>
+        </section>
+      </section>
+
+      <p class="status-line" id="status">已准备好</p>
+    </main>
+  </body>
+</html>

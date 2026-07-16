@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>家庭看板</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script defer src="/board.js"></script>
+  </head>
+  <body class="display-page">
+    <main class="display-shell">
+      <section class="hero-strip">
+        <div>
+          <p class="eyebrow" id="weekday">今天</p>
+          <h1 id="board-title">家里的小看板</h1>
+        </div>
+        <div class="clock-block" aria-live="polite">
+          <span id="time">--:--</span>
+          <small id="date">----年--月--日</small>
+        </div>
+      </section>
+
+      <section class="display-grid" aria-label="家庭信息">
+        <article class="panel weather-panel">
+          <div class="panel-heading">
+            <p>今日天气</p>
+            <span id="weather-city">广东省佛山市</span>
+          </div>
+          <div class="weather-main">
+            <strong id="weather-temp">--°</strong>
+            <div>
+              <h2 id="weather-summary">天气更新中</h2>
+              <p id="weather-detail">正在读取最新天气</p>
+            </div>
+          </div>
+          <p class="muted" id="weather-updated">尚未更新</p>
+        </article>
+
+        <article class="panel messages-panel">
+          <div class="panel-heading">
+            <p>留言板</p>
+            <span id="message-count">0 条</span>
+          </div>
+          <div class="message-list" id="messages"></div>
+        </article>
+
+        <article class="panel todos-panel">
+          <div class="panel-heading">
+            <p>备忘</p>
+            <span id="todo-count">0 项</span>
+          </div>
+          <div class="todo-list" id="todos"></div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

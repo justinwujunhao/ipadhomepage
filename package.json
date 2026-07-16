@@ -1,0 +1,13 @@
+{
+  "name": "home-ipad-board",
+  "version": "1.0.0",
+  "description": "A local family information board for an iPad display.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
