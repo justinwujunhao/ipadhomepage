@@ -1,7 +1,7 @@
 import { createServer as createHttpServer } from 'node:http';
-import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, stat, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import crypto from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -41,7 +41,8 @@ export const defaultState = {
     cityName: '广东省佛山市',
     latitude: 23.0215,
     longitude: 113.1214,
-    backgroundImage: ''
+    backgroundImage: '',
+    backgroundImages: []
   },
   messages: [
     {
@@ -113,11 +114,38 @@ async function readJsonBody(req) {
 
   if (chunks.length === 0) return {};
 
+  const contentType = req.headers['content-type'] || '';
+  const charsetMatch = /charset=([^;]+)/i.exec(contentType);
+  const charset = (charsetMatch && charsetMatch[1].trim()) || 'utf8';
+
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return JSON.parse(Buffer.concat(chunks).toString(charset));
   } catch {
     throw Object.assign(new Error('Invalid JSON body'), { status: 400 });
   }
+}
+
+async function readRawBody(req, maxBytes = 15 * 1024 * 1024) {
+  const chunks = [];
+  for await (const chunk of req) {
+    chunks.push(chunk);
+    const total = chunks.reduce((size, item) => size + item.length, 0);
+    if (total > maxBytes) {
+      throw Object.assign(new Error('Upload too large'), { status: 413 });
+    }
+  }
+  return Buffer.concat(chunks);
+}
+
+// 列表/删除用：包含 svg（已存在的示例 SVG 可列出与删除）
+const ASSET_EXT_RE = /\.(jpe?g|png|gif|webp|svg)$/i;
+// 上传用：禁用 svg，防止含 <script> 的 SVG 在同源执行 XSS
+const UPLOAD_EXT_RE = /\.(jpe?g|png|gif|webp)$/i;
+function sanitizeAssetName(raw, extRe = ASSET_EXT_RE) {
+  if (!raw || typeof raw !== 'string') return null;
+  if (raw.includes('/') || raw.includes('\\') || raw === '.' || raw === '..') return null;
+  if (!extRe.test(raw)) return null;
+  return raw;
 }
 
 function normalizeState(input) {
@@ -130,6 +158,13 @@ function normalizeState(input) {
   };
   state.settings.latitude = Number(state.settings.latitude) || defaultState.settings.latitude;
   state.settings.longitude = Number(state.settings.longitude) || defaultState.settings.longitude;
+  state.settings.backgroundImages = Array.isArray(state.settings.backgroundImages)
+    ? state.settings.backgroundImages.filter((value) => typeof value === 'string')
+    : [];
+  // 迁移：旧的单张 backgroundImage 在未显式配置 backgroundImages 时转为数组，避免被默认值覆盖
+  if (state.settings.backgroundImages.length === 0 && state.settings.backgroundImage) {
+    state.settings.backgroundImages = [state.settings.backgroundImage];
+  }
 
   state.messages = Array.isArray(source.messages) ? source.messages.filter(Boolean) : state.messages;
   state.todos = Array.isArray(source.todos) ? source.todos.filter(Boolean) : state.todos;
@@ -160,7 +195,7 @@ function buildWeatherUrl(settings) {
     current: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m',
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
     timezone: 'auto',
-    forecast_days: '1'
+    forecast_days: '7'
   });
 
   return `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
@@ -169,7 +204,8 @@ function buildWeatherUrl(settings) {
 function mapWeatherPayload(payload) {
   const current = payload.current || {};
   const daily = payload.daily || {};
-  const dailyCode = Array.isArray(daily.weather_code) ? daily.weather_code[0] : undefined;
+  const dailyCodes = Array.isArray(daily.weather_code) ? daily.weather_code : [];
+  const dailyCode = dailyCodes[0];
   const currentCode = current.weather_code ?? dailyCode;
 
   return {
@@ -185,13 +221,14 @@ function mapWeatherPayload(payload) {
       summary: weatherSummary(currentCode)
     },
     daily: {
-      maxTemperature: Array.isArray(daily.temperature_2m_max) ? daily.temperature_2m_max[0] : null,
-      minTemperature: Array.isArray(daily.temperature_2m_min) ? daily.temperature_2m_min[0] : null,
+      time: Array.isArray(daily.time) ? daily.time : [],
+      weatherCode: dailyCodes,
+      summary: dailyCodes.map((code) => weatherSummary(code)),
+      maxTemperature: Array.isArray(daily.temperature_2m_max) ? daily.temperature_2m_max : [],
+      minTemperature: Array.isArray(daily.temperature_2m_min) ? daily.temperature_2m_min : [],
       precipitationProbability: Array.isArray(daily.precipitation_probability_max)
-        ? daily.precipitation_probability_max[0]
-        : null,
-      weatherCode: dailyCode,
-      summary: weatherSummary(dailyCode ?? currentCode)
+        ? daily.precipitation_probability_max
+        : []
     }
   };
 }
@@ -199,6 +236,7 @@ function mapWeatherPayload(payload) {
 export async function createApp(options = {}) {
   const rootDir = options.rootDir || __dirname;
   const publicDir = options.publicDir || path.join(rootDir, 'public');
+  const publicAssetsDir = path.join(publicDir, 'assets');
   const dataDir = options.dataDir || path.join(rootDir, 'data');
   const dataFile = options.dataFile || path.join(dataDir, 'state.json');
   const enableWeather = options.enableWeather !== false;
@@ -370,13 +408,64 @@ export async function createApp(options = {}) {
         ...state.settings,
         title: cleanText(body.title, 80) || state.settings.title,
         cityName: cleanText(body.cityName, 80) || state.settings.cityName,
-        backgroundImage: cleanText(body.backgroundImage, 300),
+        backgroundImage:
+          body.backgroundImage !== undefined ? cleanText(body.backgroundImage, 300) : state.settings.backgroundImage,
+        backgroundImages: Array.isArray(body.backgroundImages)
+          ? body.backgroundImages.map((value) => cleanText(value, 300)).filter(Boolean)
+          : state.settings.backgroundImages,
         latitude: Number(body.latitude) || state.settings.latitude,
         longitude: Number(body.longitude) || state.settings.longitude
       };
       await saveState();
       void refreshWeather({ force: true });
       jsonResponse(res, 200, state);
+      return;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/assets') {
+      const entries = await readdir(publicAssetsDir, { withFileTypes: true }).catch(() => []);
+      const assets = [];
+      for (const entry of entries) {
+        if (!entry.isFile() || !ASSET_EXT_RE.test(entry.name)) continue;
+        let size = 0;
+        try { size = (await stat(path.join(publicAssetsDir, entry.name))).size; } catch { /* ignore */ }
+        assets.push({ name: entry.name, path: `/assets/${entry.name}`, size });
+      }
+      jsonResponse(res, 200, assets);
+      return;
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/assets') {
+      const name = sanitizeAssetName(url.searchParams.get('name'), UPLOAD_EXT_RE);
+      if (!name) {
+        jsonResponse(res, 400, { error: 'Invalid image filename (allowed: jpg/png/gif/webp; svg disabled for security)' });
+        return;
+      }
+      const body = await readRawBody(req);
+      const filePath = path.join(publicAssetsDir, name);
+      if (!filePath.startsWith(publicAssetsDir + path.sep)) {
+        jsonResponse(res, 400, { error: 'Invalid path' });
+        return;
+      }
+      await mkdir(publicAssetsDir, { recursive: true });
+      await writeFile(filePath, body);
+      jsonResponse(res, 200, { name, path: `/assets/${name}` });
+      return;
+    }
+
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/assets/')) {
+      const name = sanitizeAssetName(decodeURIComponent(url.pathname.replace('/api/assets/', '')));
+      if (!name) {
+        jsonResponse(res, 400, { error: 'Invalid image filename' });
+        return;
+      }
+      const filePath = path.join(publicAssetsDir, name);
+      if (!filePath.startsWith(publicAssetsDir + path.sep)) {
+        jsonResponse(res, 400, { error: 'Invalid path' });
+        return;
+      }
+      try { await unlink(filePath); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      jsonResponse(res, 200, { ok: true });
       return;
     }
 
@@ -406,7 +495,7 @@ export async function createApp(options = {}) {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const app = await createApp();
   app.server.listen(DEFAULT_PORT, DEFAULT_HOST, () => {
     console.log(`Home iPad board is running at http://localhost:${DEFAULT_PORT}`);
