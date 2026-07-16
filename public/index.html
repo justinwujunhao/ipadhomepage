@@ -5,18 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>家庭看板</title>
     <link rel="stylesheet" href="/styles.css">
+    <script defer src="/vendor/qrcode.js"></script>
+    <script defer src="/vendor/lunar.js"></script>
+    <script defer src="/calendar.js"></script>
     <script defer src="/board.js"></script>
   </head>
   <body class="display-page">
+    <div class="bg-slideshow" aria-hidden="true">
+      <div class="bg-slide" id="bg-slide-a"></div>
+      <div class="bg-slide" id="bg-slide-b"></div>
+    </div>
+    <div class="bg-overlay" aria-hidden="true"></div>
     <main class="display-shell">
       <section class="hero-strip">
         <div>
           <p class="eyebrow" id="weekday">今天</p>
           <h1 id="board-title">家里的小看板</h1>
+          <p class="day-badge" id="day-badge"></p>
         </div>
         <div class="clock-block" aria-live="polite">
           <span id="time">--:--</span>
           <small id="date">----年--月--日</small>
+          <small id="lunar" class="lunar-line"></small>
         </div>
       </section>
 
@@ -33,6 +43,7 @@
               <p id="weather-detail">正在读取最新天气</p>
             </div>
           </div>
+          <div class="forecast-strip" id="forecast" aria-label="未来七日预报"></div>
           <p class="muted" id="weather-updated">尚未更新</p>
         </article>
 
@@ -53,5 +64,10 @@
         </article>
       </section>
     </main>
+
+    <button class="qr-trigger" id="qr-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="扫码打开管理页">扫码管理</button>
+    <div class="qr-popover" id="qr-popover" hidden>
+      <div id="qr-popover-body"></div>
+    </div>
   </body>
 </html>

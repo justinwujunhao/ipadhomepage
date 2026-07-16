@@ -39,10 +39,17 @@
             </label>
           </div>
           <label>
-            背景图片路径
-            <input name="backgroundImage" maxlength="300" placeholder="/assets/background.jpg">
+            背景图片路径（每行一张，自动轮播）
+            <textarea name="backgroundImages" rows="4" placeholder="/assets/1.jpg&#10;/assets/2.jpg"></textarea>
           </label>
-          <p class="help-text">把照片放到 public/assets 里后，可填类似 /assets/background.jpg。</p>
+          <div class="asset-manager">
+            <div class="upload-row">
+              <input type="file" id="bg-file" accept="image/jpeg,image/png,image/gif,image/webp,image/svg+xml">
+              <button type="button" id="bg-upload-btn">上传</button>
+            </div>
+            <div class="asset-grid" id="asset-grid" aria-label="已上传图片"></div>
+          </div>
+          <p class="help-text">上传图片后点"加入"添加到轮播，或手动填写路径，每行一张。</p>
           <button type="submit">保存设置</button>
         </form>
 

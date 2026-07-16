@@ -45,7 +45,7 @@ function renderSettings() {
   form.cityName.value = settings.cityName || '';
   form.latitude.value = settings.latitude || '';
   form.longitude.value = settings.longitude || '';
-  form.backgroundImage.value = settings.backgroundImage || '';
+  form.backgroundImages.value = (settings.backgroundImages || []).join('\n');
 }
 
 function renderMessages() {
@@ -102,7 +102,7 @@ $('settings-form').addEventListener('submit', async (event) => {
         cityName: form.cityName.value,
         latitude: form.latitude.value,
         longitude: form.longitude.value,
-        backgroundImage: form.backgroundImage.value
+        backgroundImages: form.backgroundImages.value.split('\n').map((line) => line.trim()).filter(Boolean)
       })
     });
     setStatus('设置已保存');
@@ -186,3 +186,96 @@ document.addEventListener('change', async (event) => {
 });
 
 loadState().catch((error) => setStatus(`读取失败：${error.message}`));
+loadAssets().catch((error) => setStatus(`图片读取失败：${error.message}`));
+
+async function loadAssets() {
+  const response = await fetch('/api/assets', { cache: 'no-store' });
+  const assets = await response.json();
+  renderAssets(assets);
+}
+
+function renderAssets(assets) {
+  const grid = $('asset-grid');
+  grid.innerHTML = assets.length
+    ? assets
+        .map(
+          (asset) => `
+            <div class="asset-item" data-name="${escapeHtml(asset.name)}">
+              <img src="${escapeHtml(asset.path)}" alt="${escapeHtml(asset.name)}" loading="lazy">
+              <span class="asset-name">${escapeHtml(asset.name)}</span>
+              <div class="asset-actions">
+                <button type="button" class="add-button">加入</button>
+                <button type="button" class="delete-button">删除</button>
+              </div>
+            </div>
+          `
+        )
+        .join('')
+    : '<p class="help-text">还没有上传图片。</p>';
+}
+
+function assetPathFor(name) {
+  return `/assets/${name}`;
+}
+
+$('bg-upload-btn').addEventListener('click', async () => {
+  const input = $('bg-file');
+  const file = input.files && input.files[0];
+  if (!file) {
+    setStatus('请先选择图片');
+    return;
+  }
+  setStatus('上传中…');
+  try {
+    const response = await fetch(`/api/assets?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || `HTTP ${response.status}`);
+    }
+    setStatus('上传成功，点"加入"添加到轮播');
+    input.value = '';
+    await loadAssets();
+  } catch (error) {
+    setStatus(`上传失败：${error.message}`);
+  }
+});
+
+$('asset-grid').addEventListener('click', async (event) => {
+  const item = event.target.closest('.asset-item');
+  if (!item) return;
+  const name = item.dataset.name;
+  const assetPath = assetPathFor(name);
+  const textarea = $('settings-form').backgroundImages;
+
+  if (event.target.classList.contains('add-button')) {
+    const lines = textarea.value.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (!lines.includes(assetPath)) lines.push(assetPath);
+    textarea.value = lines.join('\n');
+    setStatus(`已加入 ${assetPath}（记得保存设置）`);
+    return;
+  }
+
+  if (event.target.classList.contains('delete-button')) {
+    if (!confirm(`删除 ${name}？此操作不可撤销。`)) return;
+    try {
+      const response = await fetch(`/api/assets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || `HTTP ${response.status}`);
+      }
+      textarea.value = textarea.value
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== assetPath)
+        .join('\n');
+      setStatus(`已删除 ${name}`);
+      await loadAssets();
+    } catch (error) {
+      setStatus(`删除失败：${error.message}`);
+    }
+  }
+});
